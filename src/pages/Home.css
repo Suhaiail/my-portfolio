@@ -1,0 +1,49 @@
+.home-projects-section {
+  padding: 4rem 2rem 6rem;
+  max-width: 1300px;
+  margin: 0 auto;
+  text-align: center;
+  
+  /* Establish a stacking context to bring the section above the terminal canvas */
+  position: relative;
+  z-index: 10;
+}
+
+.home-projects-section h2 {
+  font-family: var(--heading);
+  font-size: 2.5rem;
+  margin-bottom: 3rem;
+  color: var(--text-h);
+  
+  /* Remove the inherited border from App.css */
+  border-bottom: none;
+  padding-bottom: 0;
+  
+  /* Safeguard: explicitly bring the heading forward */
+  position: relative;
+  z-index: 10;
+}
+
+.projects-3x3-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0; /* Removed the gap completely so they attach seamlessly */
+}
+
+/* FIX: Ensure image placeholders are black while loading */
+.projects-3x3-grid img {
+  background-color: #000; 
+}
+
+/* Responsiveness for smaller screens */
+@media (max-width: 1024px) {
+  .projects-3x3-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .projects-3x3-grid {
+    grid-template-columns: 1fr;
+  }
+}

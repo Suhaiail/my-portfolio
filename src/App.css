@@ -183,34 +183,41 @@
   }
 }
 
+/* UPDATED CONFIGURATION FOR THE LOGO BUTTON */
 .heroName {
   position: fixed;
-  top: 60px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 40px;
+  left: 40px; /* Aligns to the left side like the sample image */
   margin: 0;
+  text-decoration: none;
 
-  font-size: clamp(2.5rem, 6vw, 5rem);
+  /* Resized typography for top-corner bar layout */
+  font-size: clamp(1.2rem, 2vw, 1.8rem);
   font-weight: 800;
-  line-height: 0.95;
   letter-spacing: -0.04em;
-  text-align: center;
   text-transform: uppercase;
+  white-space: nowrap; /* Ensures name stays clean on a single horizontal line */
 
   color: white;
   
-  pointer-events: none;
+  pointer-events: auto; /* Restored: Allows click and hover capabilities */
   z-index: 999;
+  cursor: pointer;
 
   transition:
     opacity 0.5s ease,
-    transform 0.5s ease;
+    transform 0.5s ease,
+    color 0.2s ease; /* Added smooth transition for the hover accent tint */
+}
+
+/* Color shift on hover matching your terminal preview setup */
+.heroName:hover {
+  color: #A7EF9E;
 }
 
 .heroName.hide {
   opacity: 0;
-  transform: translate(-50%, -20px);
-
+  transform: translateY(-20px);
 }
 
 /* Container alignment */
@@ -218,7 +225,7 @@
   max-width: 800px;
   margin: 0 auto;
   padding: 80px 24px;
-  text-align: left; /* Aligns body text to the left for better readability */
+  text-align: left;
 }
 
 /* Base layout spacing */

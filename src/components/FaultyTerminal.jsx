@@ -46,6 +46,12 @@ float hash21(vec2 p){
   return fract(p.x * p.y);
 }
 
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
 float noise(vec2 p)
 {
   return sin(p.x * 10.0) * sin(p.y * (3.0 + sin(time * 0.090909))) + 0.2; 
@@ -64,30 +70,37 @@ float fbm(vec2 p)
   float f = 0.0;
   float amp = 0.5 * uNoiseAmp;
   
-  mat2 modify0 = rotate(time * 0.02);
+  mat2 rotSlow = rotate(time * 0.02);
+  mat2 rotFast = rotate(time * 0.08);
+  
   f += amp * noise(p);
-  p = modify0 * p * 2.0;
+  p = rotSlow * p * 2.0;
+  
   amp *= 0.454545;
   
-  mat2 modify1 = rotate(time * 0.02);
   f += amp * noise(p);
-  p = modify1 * p * 2.0;
+  p = rotSlow * p * 2.0;
+  
   amp *= 0.454545;
   
-  mat2 modify2 = rotate(time * 0.08);
   f += amp * noise(p);
   
   return f;
 }
 
 float pattern(vec2 p, out vec2 q, out vec2 r) {
-  vec2 offset1 = vec2(1.0);
-  vec2 offset0 = vec2(0.0);
-  mat2 rot01 = rotate(0.1 * time);
-  mat2 rot1 = rotate(0.1);
+  mat2 rot = rotate(0.1 * time);
   
-  q = vec2(fbm(p + offset1), fbm(rot01 * p + offset1));
-  r = vec2(fbm(rot1 * q + offset0), fbm(q + offset0));
+  q = vec2(
+    fbm(p + 1.0),
+    fbm(rot * p + 1.0)
+  );
+  
+  r = vec2(
+    fbm(q),
+    fbm(q)
+  );
+  
   return fbm(p + r);
 }
 
@@ -100,16 +113,18 @@ float digit(vec2 p){
     
     if(uUseMouse > 0.5){
         vec2 mouseWorld = uMouse * uScale;
-        float distToMouse = distance(s, mouseWorld);
-        float mouseInfluence = exp(-distToMouse * 8.0) * uMouseStrength * 10.0;
+        vec2 diff = s - mouseWorld;
+        float dist2 = dot(diff, diff);
+        
+        float mouseInfluence = exp(-dist2 * 40.0) * uMouseStrength * 10.0;
         intensity += mouseInfluence;
         
-        float ripple = sin(distToMouse * 20.0 - iTime * 5.0) * 0.1 * mouseInfluence;
+        float ripple = sin(dist2 * 80.0 - iTime * 5.0) * 0.1 * mouseInfluence;
         intensity += ripple;
     }
     
     if(uUsePageLoadAnimation > 0.5){
-        float cellRandom = fract(sin(dot(s, vec2(12.9898, 78.233))) * 43758.5453);
+        float cellRandom = hash12(s);
         float cellDelay = cellRandom * 0.8;
         float cellProgress = clamp((uPageLoadProgress - cellDelay) / 0.2, 0.0, 1.0);
         
@@ -149,7 +164,6 @@ float displace(vec2 look)
 }
 
 vec3 getColor(vec2 p){
-    
     float bar = step(mod(p.y + time * 20.0, 1.0), 0.2) * 0.4 + 1.0;
     bar *= uScanlineIntensity;
     
@@ -164,11 +178,13 @@ vec3 getColor(vec2 p){
     float middle = digit(p);
     
     const float off = 0.002;
-    float sum = digit(p + vec2(-off, -off)) + digit(p + vec2(0.0, -off)) + digit(p + vec2(off, -off)) +
-                digit(p + vec2(-off, 0.0)) + digit(p + vec2(0.0, 0.0)) + digit(p + vec2(off, 0.0)) +
-                digit(p + vec2(-off, off)) + digit(p + vec2(0.0, off)) + digit(p + vec2(off, off));
+    float sum = middle +
+                digit(p + vec2(off, 0.0)) +
+                digit(p + vec2(-off, 0.0)) +
+                digit(p + vec2(0.0, off)) +
+                digit(p + vec2(0.0, -off));
     
-    vec3 baseColor = vec3(0.9) * middle + sum * 0.1 * vec3(1.0) * bar;
+    vec3 baseColor = vec3(0.9 * middle) + vec3(sum * bar * 0.1);
     return baseColor;
 }
 
@@ -190,7 +206,7 @@ void main() {
     vec2 p = uv * uScale;
     vec3 col = getColor(p);
 
-    if(uChromaticAberration != 0.0){
+    if(uChromaticAberration > 0.001){
       vec2 ca = vec2(uChromaticAberration) / iResolution.xy;
       col.r = getColor(p + ca).r;
       col.b = getColor(p - ca).b;
@@ -235,7 +251,7 @@ export default function FaultyTerminal({
   tint = '#ffffff',
   mouseReact = true,
   mouseStrength = 0.2,
-  dpr = Math.min(window.devicePixelRatio || 1, 2),
+  dpr = Math.min(window.devicePixelRatio || 1, 1.5),
   pageLoadAnimation = true,
   brightness = 1,
   className,
@@ -247,14 +263,18 @@ export default function FaultyTerminal({
   const rendererRef = useRef(null);
   const mouseRef = useRef({ x: 0.5, y: 0.5 });
   const smoothMouseRef = useRef({ x: 0.5, y: 0.5 });
-  const frozenTimeRef = useRef(0);
+  
+  // Initialize frozen time to 16 seconds mapped into the time scale
+  const frozenTimeRef = useRef(16 * timeScale);
   const rafRef = useRef(0);
   const loadAnimationStartRef = useRef(0);
-  const timeOffsetRef = useRef(Math.random() * 100);
+  
+  // Track the actual initial timestamp from requestAnimationFrame
+  const startTimeRef = useRef(null);
 
   const tintVec = useMemo(() => hexToRgb(tint), [tint]);
-
   const ditherValue = useMemo(() => (typeof dither === 'boolean' ? (dither ? 1 : 0) : dither), [dither]);
+  const gridUniform = useMemo(() => new Float32Array(gridMul), [gridMul]);
 
   const handleMouseMove = useCallback(e => {
     const ctn = containerRef.current;
@@ -275,18 +295,16 @@ export default function FaultyTerminal({
     gl.clearColor(0, 0, 0, 1);
 
     const geometry = new Triangle(gl);
+    const resolution = new Color(gl.canvas.width, gl.canvas.height, gl.canvas.width / gl.canvas.height);
 
     const program = new Program(gl, {
       vertex: vertexShader,
       fragment: fragmentShader,
       uniforms: {
-        iTime: { value: 0 },
-        iResolution: {
-          value: new Color(gl.canvas.width, gl.canvas.height, gl.canvas.width / gl.canvas.height)
-        },
+        iTime: { value: frozenTimeRef.current }, // Initial state is set to 16s state
+        iResolution: { value: resolution },
         uScale: { value: scale },
-
-        uGridMul: { value: new Float32Array(gridMul) },
+        uGridMul: { value: gridUniform },
         uDigitSize: { value: digitSize },
         uScanlineIntensity: { value: scanlineIntensity },
         uGlitchAmount: { value: glitchAmount },
@@ -313,11 +331,9 @@ export default function FaultyTerminal({
     function resize() {
       if (!ctn || !renderer) return;
       renderer.setSize(ctn.offsetWidth, ctn.offsetHeight);
-      program.uniforms.iResolution.value = new Color(
-        gl.canvas.width,
-        gl.canvas.height,
-        gl.canvas.width / gl.canvas.height
-      );
+      resolution.r = gl.canvas.width;
+      resolution.g = gl.canvas.height;
+      resolution.b = gl.canvas.width / gl.canvas.height;
     }
 
     const resizeObserver = new ResizeObserver(() => resize());
@@ -325,37 +341,56 @@ export default function FaultyTerminal({
     resize();
 
     const update = t => {
+      if(document.hidden){
+          rafRef.current = requestAnimationFrame(update);
+          return;
+      }
+        
       rafRef.current = requestAnimationFrame(update);
+      const uniforms = program.uniforms;
 
       if (pageLoadAnimation && loadAnimationStartRef.current === 0) {
         loadAnimationStartRef.current = t;
       }
 
+      // Capture the starting time of the loop execution
+      if (startTimeRef.current === null) {
+        startTimeRef.current = t;
+      }
+
       if (!pause) {
-        const elapsed = (t * 0.001 + timeOffsetRef.current) * timeScale;
-        program.uniforms.iTime.value = elapsed;
+        // Calculate standard elapsed time + 16 seconds padding
+        const elapsedRealTime = (t - startTimeRef.current) * 0.001 + 16;
+        const elapsed = elapsedRealTime * timeScale;
+        uniforms.iTime.value = elapsed;
         frozenTimeRef.current = elapsed;
       } else {
-        program.uniforms.iTime.value = frozenTimeRef.current;
+        uniforms.iTime.value = frozenTimeRef.current;
       }
 
       if (pageLoadAnimation && loadAnimationStartRef.current > 0) {
         const animationDuration = 2000;
         const animationElapsed = t - loadAnimationStartRef.current;
         const progress = Math.min(animationElapsed / animationDuration, 1);
-        program.uniforms.uPageLoadProgress.value = progress;
+        uniforms.uPageLoadProgress.value = progress;
+        
+        if (progress >= 1) {
+            uniforms.uUsePageLoadAnimation.value = 0;
+        }
       }
 
       if (mouseReact) {
-        const dampingFactor = 0.08;
-        const smoothMouse = smoothMouseRef.current;
-        const mouse = mouseRef.current;
-        smoothMouse.x += (mouse.x - smoothMouse.x) * dampingFactor;
-        smoothMouse.y += (mouse.y - smoothMouse.y) * dampingFactor;
+        const dx = mouseRef.current.x - smoothMouseRef.current.x;
+        const dy = mouseRef.current.y - smoothMouseRef.current.y;
+        
+        if (Math.abs(dx) > 0.0005 || Math.abs(dy) > 0.0005) {
+            const damping = 0.08;
+            smoothMouseRef.current.x += dx * damping;
+            smoothMouseRef.current.y += dy * damping;
 
-        const mouseUniform = program.uniforms.uMouse.value;
-        mouseUniform[0] = smoothMouse.x;
-        mouseUniform[1] = smoothMouse.y;
+            uniforms.uMouse.value[0] = smoothMouseRef.current.x;
+            uniforms.uMouse.value[1] = smoothMouseRef.current.y;
+        }
       }
 
       renderer.render({ scene: mesh });
@@ -372,14 +407,14 @@ export default function FaultyTerminal({
       if (gl.canvas.parentElement === ctn) ctn.removeChild(gl.canvas);
       gl.getExtension('WEBGL_lose_context')?.loseContext();
       loadAnimationStartRef.current = 0;
-      timeOffsetRef.current = Math.random() * 100;
+      startTimeRef.current = null; // Reset time tracking on unmount
     };
   }, [
     dpr,
     pause,
     timeScale,
     scale,
-    gridMul,
+    gridUniform,
     digitSize,
     scanlineIntensity,
     glitchAmount,
