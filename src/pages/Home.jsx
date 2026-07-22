@@ -72,7 +72,7 @@ export default function Home() {
 
       {/* 3x3 Projects Section */}
       <section className="home-projects-section">
-        <h2>Personal Proects</h2>
+        <h2>Personal Projects</h2>
         <div className="projects-3x3-grid">
           {projects.map((project) => (
             <ProjectBox 
